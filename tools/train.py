@@ -69,7 +69,9 @@ def main():
     best_nme = 100
     last_epoch = config.TRAIN.BEGIN_EPOCH
     if config.TRAIN.RESUME:
-        model_state_file = os.path.join(final_output_dir,
+        # model_state_file = os.path.join(final_output_dir,
+        #                                 'latest.pth')
+        model_state_file = os.path.join('../',final_output_dir,
                                         'latest.pth')
         if os.path.islink(model_state_file):
             checkpoint = torch.load(model_state_file)
