@@ -21,6 +21,7 @@ from lib.config import config, update_config
 from lib.datasets import get_dataset
 from lib.core import function
 from lib.utils import utils
+import matplotlib.pyplot as plt
 
 
 def parse_args():
@@ -113,12 +114,15 @@ def main():
     for epoch in range(last_epoch, config.TRAIN.END_EPOCH):
         lr_scheduler.step()
 
-        function.train(config, train_loader, model, criterion,
+        train_loss, train_nme = function.train(config, train_loader, model, criterion,
                        optimizer, epoch, writer_dict)
+        
+        train_stat.append([train_loss, train_nme])
 
         # evaluate
-        nme, predictions = function.validate(config, val_loader, model,
+        nme, val_loss, predictions = function.validate(config, val_loader, model,
                                              criterion, epoch, writer_dict)
+        val_stat.append([nme, val_loss])
 
         is_best = nme < best_nme
         best_nme = min(nme, best_nme)
@@ -141,14 +145,27 @@ def main():
 
 
 if __name__ == '__main__':
+    train_stat = list()
+    val_stat = list()
     main()
 
+    train_nme = [x[0] for x in train_stat]
+    train_loss = [x[1] for x in train_stat]
+    val_nme = [x[0] for x in val_stat]
+    val_loss = [x[1] for x in val_stat]
 
+    plt.figure(figsize = (8,6))
+    plt.plot(train_nme, label = 'train_nme')
+    plt.plot(val_nme, label = 'val_nme')
+    plt.legend()
+    plt.xlabel('epoch')
+    plt.ylabel('NME')
+    plt.savefig('output/nme.png')
 
-
-
-
-
-
-
-
+    plt.figure(figsize = (8,6))
+    plt.plot(train_loss, label = 'train_loss')
+    plt.plot(val_loss, label ='val_loss')
+    plt.legend()
+    plt.xlabel('epoch')
+    plt.ylabel('loss')
+    plt.savefig('output/loss.png')
