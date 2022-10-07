@@ -52,8 +52,8 @@ def compute_nme(preds, meta):
         elif L == 68:  # 300w
             # interocular
             interocular = np.linalg.norm(pts_gt[36, ] - pts_gt[45, ])
-        elif L == 98:
-            interocular = np.linalg.norm(pts_gt[60, ] - pts_gt[72, ])
+        elif L == 4:
+            interocular = np.linalg.norm(pts_gt[0, ] - pts_gt[3, ])
         else:
             raise ValueError('Number of landmarks is wrong')
         rmse[i] = np.sum(np.linalg.norm(pts_pred - pts_gt, axis=1)) / (interocular * L)

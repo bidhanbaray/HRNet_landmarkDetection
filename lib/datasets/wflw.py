@@ -38,8 +38,8 @@ class WFLW(data.Dataset):
         # load annotations
         self.landmarks_frame = pd.read_csv(self.csv_file)
 
-        self.mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-        self.std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+        self.mean = np.array([0.5104, 0.2938, 0.2659], dtype=np.float32)
+        self.std = np.array([0.3376, 0.2582, 0.2279], dtype=np.float32)
 
     def __len__(self):
         return len(self.landmarks_frame)
