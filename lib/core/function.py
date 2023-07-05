@@ -14,7 +14,7 @@ import logging
 import torch
 import numpy as np
 
-from .evaluation import decode_preds, compute_nme
+from .evaluation import decode_preds, compute_nme, compute_angleMAE
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +52,9 @@ def train(config, train_loader, model, critertion, optimizer,
     nme_count = 0
     nme_batch_sum = 0
 
+    angleMAE_count = 0
+    angleMAE_batch_sum = 0
+
     end = time.time()
 
     for i, (inp, target, meta) in enumerate(train_loader):
@@ -62,8 +65,6 @@ def train(config, train_loader, model, critertion, optimizer,
         output = model(inp)
         target = target.cuda(non_blocking=True)
 
-        loss = critertion(output, target)
-
         # NME
         score_map = output.data.cpu()
         preds = decode_preds(score_map, meta['center'], meta['scale'], [config.MODEL.HEATMAP_SIZE[0], config.MODEL.HEATMAP_SIZE[1]]) # HERE is the HEATMAP_SIZE
@@ -71,6 +72,15 @@ def train(config, train_loader, model, critertion, optimizer,
         nme_batch = compute_nme(preds, meta)
         nme_batch_sum = nme_batch_sum + np.sum(nme_batch)
         nme_count = nme_count + preds.size(0)
+        
+
+        #angle MAE
+        angleMAE_batch = compute_angleMAE(preds, meta)
+        angleMAE_batch_sum = angleMAE_batch_sum+np.sum(angleMAE_batch)
+        angleMAE_count = angleMAE_count+preds.size(0)
+        
+        loss = critertion(output, target)+(torch.sum(torch.tensor(angleMAE_batch))/(preds.size(0)*360)).cuda()
+ 
 
         # optimize
         optimizer.zero_grad()
@@ -99,10 +109,11 @@ def train(config, train_loader, model, critertion, optimizer,
 
         end = time.time()
     nme = nme_batch_sum / nme_count
-    msg = 'Train Epoch {} time:{:.4f} loss:{:.4f} nme:{:.4f}'\
-        .format(epoch, batch_time.avg, losses.avg, nme)
+    angleMAE = angleMAE_batch_sum / angleMAE_count
+    msg = 'Train Epoch {} time:{:.4f} loss:{:.4f} nme:{:.4f} angleMAE:{:.4f}'\
+        .format(epoch, batch_time.avg, losses.avg, nme, angleMAE)
     logger.info(msg)
-    return nme, losses.avg
+    return nme, losses.avg, angleMAE
 
 
 def validate(config, val_loader, model, criterion, epoch, writer_dict):
@@ -118,6 +129,9 @@ def validate(config, val_loader, model, criterion, epoch, writer_dict):
 
     nme_count = 0
     nme_batch_sum = 0
+    angleMAE_count = 0
+    angleMAE_batch_sum = 0
+
     count_failure_008 = 0
     count_failure_010 = 0
     end = time.time()
@@ -129,12 +143,15 @@ def validate(config, val_loader, model, criterion, epoch, writer_dict):
             target = target.cuda(non_blocking=True)
 
             score_map = output.data.cpu()
-            # loss
-            loss = criterion(output, target)
+            
 
             preds = decode_preds(score_map, meta['center'], meta['scale'], [config.MODEL.HEATMAP_SIZE[0], config.MODEL.HEATMAP_SIZE[1]]) # HERE is the HEATMAP_SIZE
             # NME
             nme_temp = compute_nme(preds, meta)
+            angleMAE_temp = compute_angleMAE(preds, meta)
+
+            # loss
+            loss = criterion(output, target)+(torch.sum(torch.tensor(angleMAE_temp))/(preds.size(0)*360)).cuda()
             # Failure Rate under different threshold
             failure_008 = (nme_temp > 0.08).sum()
             failure_010 = (nme_temp > 0.10).sum()
@@ -142,6 +159,7 @@ def validate(config, val_loader, model, criterion, epoch, writer_dict):
             count_failure_010 += failure_010
 
             nme_batch_sum += np.sum(nme_temp)
+            angleMAE_batch_sum += np.sum(angleMAE_temp)
             nme_count = nme_count + preds.size(0)
             for n in range(score_map.size(0)):
                 predictions[meta['index'][n], :, :] = preds[n, :, :]
@@ -153,11 +171,12 @@ def validate(config, val_loader, model, criterion, epoch, writer_dict):
             end = time.time()
 
     nme = nme_batch_sum / nme_count
+    angleMAE = angleMAE_batch_sum/ nme_count
     failure_008_rate = count_failure_008 / nme_count
     failure_010_rate = count_failure_010 / nme_count
 
-    msg = 'Test Epoch {} time:{:.4f} loss:{:.4f} nme:{:.4f} [008]:{:.4f} ' \
-          '[010]:{:.4f}'.format(epoch, batch_time.avg, losses.avg, nme,
+    msg = 'Test Epoch {} time:{:.4f} loss:{:.4f} nme:{:.4f} angleMAE:{:.4f} [008]:{:.4f} ' \
+          '[010]:{:.4f}'.format(epoch, batch_time.avg, losses.avg, nme, angleMAE,
                                 failure_008_rate, failure_010_rate)
     logger.info(msg)
 
@@ -168,7 +187,7 @@ def validate(config, val_loader, model, criterion, epoch, writer_dict):
         writer.add_scalar('valid_nme', nme, global_steps)
         writer_dict['valid_global_steps'] = global_steps + 1
 
-    return nme, losses.avg, predictions
+    return nme, angleMAE, losses.avg, predictions
 
 
 def inference(config, data_loader, model):
@@ -183,6 +202,7 @@ def inference(config, data_loader, model):
 
     nme_count = 0
     nme_batch_sum = 0
+    angleMAE_batch_sum = 0
     count_failure_008 = 0
     count_failure_010 = 0
     end = time.time()
@@ -196,6 +216,8 @@ def inference(config, data_loader, model):
 
             # NME
             nme_temp = compute_nme(preds, meta)
+            # AngleMAE
+            angleMAE_temp = compute_angleMAE(preds, meta)
 
             failure_008 = (nme_temp > 0.08).sum()
             failure_010 = (nme_temp > 0.10).sum()
@@ -203,6 +225,7 @@ def inference(config, data_loader, model):
             count_failure_010 += failure_010
 
             nme_batch_sum += np.sum(nme_temp)
+            angleMAE_batch_sum +=np.sum(angleMAE_temp)
             nme_count = nme_count + preds.size(0)
             for n in range(score_map.size(0)):
                 predictions[meta['index'][n], :, :] = preds[n, :, :]
@@ -212,11 +235,12 @@ def inference(config, data_loader, model):
             end = time.time()
 
     nme = nme_batch_sum / nme_count
+    angleMAE = angleMAE_batch_sum/ nme_count
     failure_008_rate = count_failure_008 / nme_count
     failure_010_rate = count_failure_010 / nme_count
 
-    msg = 'Test Results time:{:.4f} loss:{:.4f} nme:{:.4f} [008]:{:.4f} ' \
-          '[010]:{:.4f}'.format(batch_time.avg, losses.avg, nme,
+    msg = 'Test Results time:{:.4f} loss:{:.4f} angleMAE:{:.4f} nme:{:.4f} [008]:{:.4f} ' \
+          '[010]:{:.4f}'.format(batch_time.avg, losses.avg, angleMAE, nme,
                                 failure_008_rate, failure_010_rate)
     logger.info(msg)
 

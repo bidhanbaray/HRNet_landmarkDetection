@@ -60,6 +60,61 @@ def compute_nme(preds, meta):
 
     return rmse
 
+import math
+# def get_angle(x1,y1,x2,y2,x3,y3,x4,y4):
+def get_angle(pts):
+    x1,y1 = pts[0][0], pts[0][1]
+    x2,y2 = pts[1][0], pts[1][1]
+    x3,y3 = pts[2][0], pts[2][1]
+    x4,y4 = pts[3][0], pts[3][1]
+    try:
+        vector1 = [x2-x1, (y2-y1)]
+        vector2 = [x3-x4, (y3-y4)]
+        length1 = math.sqrt(vector1[0] * vector1[0] + vector1[1] * vector1[1])
+        length2 = math.sqrt(vector2[0] * vector2[0] + vector2[1] * vector2[1])
+        if length2 ==0:
+            angle = 360
+        elif length1 == 0:
+            angle = 360
+        elif ((vector1[0] * vector2[0] + vector1[1] * vector2[1])/ (length1 * length2))>1.:
+            angle = 0
+        elif ((vector1[0] * vector2[0] + vector1[1] * vector2[1])/ (length1 * length2))<-1.:
+            angle = 180
+        else:
+            angle = math.degrees(math.acos((vector1[0] * vector2[0] + vector1[1] * vector2[1])/ (length1 * length2)))
+        
+        if angle>90:
+            return 180-angle
+        else:
+            return angle
+    except:
+        print("Angle Calculation Error")
+
+def compute_angleMAE(preds, meta):
+
+    targets = meta['pts']
+    preds = preds.numpy()
+    target = targets.cpu().numpy()
+
+    N = preds.shape[0]
+    L = preds.shape[1]
+    mae = np.zeros(N)
+
+    for i in range(N):
+        pts_pred, pts_gt = preds[i, ], target[i, ]
+        if L == 4:  # PC
+            # print('pred')
+            # print(pts_pred)
+            # print('gt')
+            # print(pts_gt)
+            mae[i] = abs(get_angle(pts_pred)-get_angle(pts_gt))
+            # print(mae[i])
+        else:
+            raise ValueError('Number of landmarks is wrong')
+        # rmse[i] = np.sum(np.linalg.norm(pts_pred - pts_gt, axis=1)) / (interocular * L)
+
+    return mae
+
 
 def decode_preds(output, center, scale, res):
     coords = get_preds(output)  # float type

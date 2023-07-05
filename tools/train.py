@@ -23,6 +23,8 @@ from lib.core import function
 from lib.utils import utils
 import matplotlib.pyplot as plt
 
+def angleLoss():
+    return 0
 
 def parse_args():
 
@@ -67,6 +69,7 @@ def main():
 
     optimizer = utils.get_optimizer(config, model)
     best_nme = 100
+    best_angleMAE = 100
     last_epoch = config.TRAIN.BEGIN_EPOCH
     if config.TRAIN.RESUME:
         # model_state_file = os.path.join(final_output_dir,
@@ -116,25 +119,25 @@ def main():
     for epoch in range(last_epoch, config.TRAIN.END_EPOCH):
         lr_scheduler.step()
 
-        train_loss, train_nme = function.train(config, train_loader, model, criterion,
+        train_nme, train_loss, train_angleMAE = function.train(config, train_loader, model, criterion,
                        optimizer, epoch, writer_dict)
         
-        train_stat.append([train_loss, train_nme])
+        train_stat.append([train_loss, train_nme, train_angleMAE ])
 
         # evaluate
-        nme, val_loss, predictions = function.validate(config, val_loader, model,
+        nme, angleMAE, val_loss, predictions = function.validate(config, val_loader, model,
                                              criterion, epoch, writer_dict)
-        val_stat.append([nme, val_loss])
+        val_stat.append([nme, val_loss, angleMAE])
 
-        is_best = nme < best_nme
-        best_nme = min(nme, best_nme)
+        is_best = angleMAE < best_angleMAE
+        best_angleMAE = min(angleMAE, best_angleMAE)
 
         logger.info('=> saving checkpoint to {}'.format(final_output_dir))
         print("best:", is_best)
         utils.save_checkpoint(
             {"state_dict": model,
              "epoch": epoch + 1,
-             "best_nme": best_nme,
+             "best_angleMAE": best_angleMAE,
              "optimizer": optimizer.state_dict(),
              }, predictions, is_best, final_output_dir, 'checkpoint_{}.pth'.format(epoch))
 
@@ -153,8 +156,11 @@ if __name__ == '__main__':
 
     train_nme = [x[0] for x in train_stat]
     train_loss = [x[1] for x in train_stat]
+    train_angle =  [x[2] for x in train_stat]
+
     val_nme = [x[0] for x in val_stat]
     val_loss = [x[1] for x in val_stat]
+    val_angle =  [x[2] for x in val_stat]
 
     plt.figure(figsize = (8,6))
     plt.plot(train_nme, label = 'train_nme')
@@ -171,3 +177,11 @@ if __name__ == '__main__':
     plt.xlabel('epoch')
     plt.ylabel('loss')
     plt.savefig('output/loss.png')
+
+    plt.figure(figsize = (8,6))
+    plt.plot(train_angle, label = 'train_angle_error')
+    plt.plot(val_angle, label ='val_angle_error')
+    plt.legend()
+    plt.xlabel('epoch')
+    plt.ylabel('loss')
+    plt.savefig('output/angle_error.png')
